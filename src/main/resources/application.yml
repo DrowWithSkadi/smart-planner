@@ -29,6 +29,11 @@ spring:
 server:
   port: 8080
 
+logging:
+  file:
+    # Логи пишутся ещё и в файл logs/smart-planner.log — так их удобно смотреть и пересылать
+    name: logs/smart-planner.log
+
 telegram:
   bot:
     # Можно задать здесь через переменную окружения TELEGRAM_BOT_TOKEN
