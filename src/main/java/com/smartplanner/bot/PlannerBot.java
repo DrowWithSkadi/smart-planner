@@ -1,0 +1,209 @@
+package com.smartplanner.bot;
+
+import com.smartplanner.common.NotFoundException;
+import com.smartplanner.task.Task;
+import com.smartplanner.task.TaskService;
+import com.smartplanner.task.dto.TaskRequest;
+import com.smartplanner.user.AppUser;
+import com.smartplanner.user.UserService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
+import org.telegram.telegrambots.longpolling.starter.SpringLongPollingBot;
+import org.telegram.telegrambots.longpolling.util.DefaultLongPollingUpdateConsumer;
+import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
+import org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethod;
+import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
+import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
+import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.User;
+import org.telegram.telegrambots.meta.api.objects.message.MaybeInaccessibleMessage;
+import org.telegram.telegrambots.meta.api.objects.message.Message;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
+import org.telegram.telegrambots.meta.api.objects.webapp.WebAppInfo;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+import org.telegram.telegrambots.meta.generics.TelegramClient;
+
+import java.io.Serializable;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.List;
+
+/**
+ * Telegram-бот: принимает сообщения и нажатия на кнопки.
+ * Сама логика задач живёт в TaskService — бот только переводит команды в вызовы сервиса.
+ */
+@Component
+@ConditionalOnBotToken
+public class PlannerBot extends DefaultLongPollingUpdateConsumer implements SpringLongPollingBot {
+
+    private static final Logger log = LoggerFactory.getLogger(PlannerBot.class);
+
+    private final BotProperties properties;
+    private final TelegramClient telegram;
+    private final UserService userService;
+    private final TaskService taskService;
+
+    public PlannerBot(BotProperties properties, TelegramClient telegram,
+                      UserService userService, TaskService taskService) {
+        this.properties = properties;
+        this.telegram = telegram;
+        this.userService = userService;
+        this.taskService = taskService;
+    }
+
+    @Override
+    public String getBotToken() {
+        return properties.token();
+    }
+
+    @Override
+    public LongPollingUpdateConsumer getUpdatesConsumer() {
+        return this;
+    }
+
+    @Override
+    public void consume(Update update) {
+        try {
+            if (update.hasCallbackQuery()) {
+                handleCallback(update.getCallbackQuery());
+            } else if (update.hasMessage() && update.getMessage().hasText()) {
+                handleText(update.getMessage());
+            }
+        } catch (Exception e) {
+            log.error("Ошибка при обработке сообщения", e);
+        }
+    }
+
+    // ---------- Текстовые сообщения ----------
+
+    private void handleText(Message message) {
+        User from = message.getFrom();
+        AppUser user = userService.findOrCreate(from.getId(), message.getChatId(),
+                from.getFirstName(), from.getUserName());
+        ZoneId zone = user.zoneId();
+        String text = message.getText().trim();
+
+        // "/add@MyBot купить" → команда "/add", аргумент "купить"
+        String command = text.startsWith("/") ? text.split("\\s+", 2)[0].split("@")[0].toLowerCase() : "";
+        String argument = text.startsWith("/") && text.contains(" ") ? text.substring(text.indexOf(' ') + 1).trim() : "";
+
+        switch (command) {
+            case "/start" -> send(user.getChatId(), BotMessages.welcome(from.getFirstName()), startButtons());
+            case "/help" -> send(user.getChatId(), BotMessages.help(), null);
+            case "/today" -> {
+                List<Task> tasks = taskService.findForDay(user.getId(), LocalDate.now(zone));
+                send(user.getChatId(), BotMessages.taskList("📅 Задачи на сегодня:", tasks, zone,
+                        "На сегодня задач нет 🎉"), null);
+            }
+            case "/list" -> {
+                List<Task> tasks = taskService.findUpcoming(user.getId());
+                send(user.getChatId(), BotMessages.taskList("🗂 Ближайшие задачи:", tasks, zone,
+                        "Предстоящих задач нет. Напиши, например: завтра 10:00 Сходить в зал"), null);
+            }
+            case "/add" -> addTask(user, argument);
+            case "" -> addTask(user, text); // обычный текст без команды — тоже новая задача
+            default -> send(user.getChatId(), "Не знаю такую команду. Список команд — /help", null);
+        }
+    }
+
+    private void addTask(AppUser user, String text) {
+        ZoneId zone = user.zoneId();
+        try {
+            QuickAddParser.ParsedTask parsed = QuickAddParser.parse(text, LocalDate.now(zone));
+            Task task = taskService.create(user.getId(),
+                    new TaskRequest(parsed.title(), null, parsed.dueAt(), null));
+            send(user.getChatId(), BotMessages.taskCreated(task, zone), BotMessages.createdButtons(task.getId()));
+        } catch (IllegalArgumentException e) {
+            send(user.getChatId(), "🤔 " + e.getMessage() + "\n\n" + BotMessages.help(), null);
+        }
+    }
+
+    // ---------- Нажатия на кнопки ----------
+
+    private void handleCallback(CallbackQuery callback) {
+        String answer;
+        String status = null;
+        try {
+            AppUser user = userService.findByTelegramId(callback.getFrom().getId())
+                    .orElseThrow(() -> new NotFoundException("Сначала напиши /start"));
+            String[] parts = callback.getData().split(":");
+            Long taskId = Long.parseLong(parts[1]);
+
+            switch (parts[0]) {
+                case BotMessages.CB_DONE -> {
+                    taskService.setDone(user.getId(), taskId, true);
+                    answer = "Отмечено как выполненное";
+                    status = "✅ Выполнено";
+                }
+                case BotMessages.CB_SNOOZE -> {
+                    int minutes = Integer.parseInt(parts[2]);
+                    taskService.snooze(user.getId(), taskId, minutes);
+                    answer = "Напомню через " + minutes + " мин";
+                    status = "⏰ Отложено на " + minutes + " мин";
+                }
+                case BotMessages.CB_DELETE -> {
+                    taskService.delete(user.getId(), taskId);
+                    answer = "Задача удалена";
+                    status = "🗑 Удалено";
+                }
+                default -> answer = "Неизвестное действие";
+            }
+        } catch (NotFoundException e) {
+            answer = e.getMessage();
+        } catch (RuntimeException e) {
+            log.warn("Некорректные данные кнопки: {}", callback.getData(), e);
+            answer = "Что-то пошло не так";
+        }
+
+        execute(AnswerCallbackQuery.builder().callbackQueryId(callback.getId()).text(answer).build());
+        if (status != null) {
+            appendStatus(callback.getMessage(), status);
+        }
+    }
+
+    /** Дописывает статус к сообщению с кнопками и убирает кнопки. */
+    private void appendStatus(MaybeInaccessibleMessage original, String status) {
+        if (!(original instanceof Message message) || message.getText() == null) {
+            return;
+        }
+        execute(EditMessageText.builder()
+                .chatId(message.getChatId())
+                .messageId(message.getMessageId())
+                .text(message.getText() + "\n\n" + status)
+                .build());
+    }
+
+    // ---------- Вспомогательное ----------
+
+    private InlineKeyboardMarkup startButtons() {
+        if (!properties.hasWebApp()) {
+            return null;
+        }
+        InlineKeyboardButton open = InlineKeyboardButton.builder()
+                .text("📅 Открыть планер")
+                .webApp(new WebAppInfo(properties.webAppUrl()))
+                .build();
+        return InlineKeyboardMarkup.builder().keyboardRow(new InlineKeyboardRow(open)).build();
+    }
+
+    private void send(Long chatId, String text, InlineKeyboardMarkup keyboard) {
+        SendMessage message = SendMessage.builder().chatId(chatId).text(text).build();
+        if (keyboard != null) {
+            message.setReplyMarkup(keyboard);
+        }
+        execute(message);
+    }
+
+    private <T extends Serializable> void execute(BotApiMethod<T> method) {
+        try {
+            telegram.execute(method);
+        } catch (TelegramApiException e) {
+            log.error("Не удалось отправить запрос в Telegram", e);
+        }
+    }
+}

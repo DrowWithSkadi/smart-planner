@@ -1,0 +1,27 @@
+# Сборка
+target/
+build/
+out/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# VS Code / Eclipse
+.vscode/
+.settings/
+.classpath
+.project
+
+# Локальная база данных H2
+data/
+
+# Секреты — никогда не коммитить
+local.properties
+.env
+*.env
+
+# Логи и системное
+*.log
+.DS_Store
+Thumbs.db

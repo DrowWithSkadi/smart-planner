@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: smart-planner
+
+  # Секреты (токен бота) лежат в файле local.properties в корне проекта.
+  # Этот файл есть в .gitignore и НЕ попадает в GitHub. Пример — local.properties.example
+  config:
+    import: optional:file:./local.properties
+
+  datasource:
+    # База хранится в файле ./data/smart-planner.mv.db и не пропадает после перезапуска
+    url: jdbc:h2:file:./data/smart-planner
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      # update — Hibernate сам создаёт и дополняет таблицы по сущностям.
+      # Для учебного проекта удобно; позже можно перейти на миграции (Flyway).
+      ddl-auto: update
+    open-in-view: false
+
+  h2:
+    console:
+      # Просмотр базы в браузере: http://localhost:8080/h2-console
+      # JDBC URL: jdbc:h2:file:./data/smart-planner, пользователь sa, пароль пустой
+      enabled: true
+
+server:
+  port: 8080
+
+telegram:
+  bot:
+    # Можно задать здесь через переменную окружения TELEGRAM_BOT_TOKEN
+    # или в local.properties строкой telegram.bot.token=...
+    token: ${TELEGRAM_BOT_TOKEN:}
+    username: ${TELEGRAM_BOT_USERNAME:}
+    web-app-url: ${TELEGRAM_WEB_APP_URL:}
+
+app:
+  default-timezone: Europe/Tallinn
+  reminders:
+    default-before-minutes: 15
+    check-interval-ms: 30000

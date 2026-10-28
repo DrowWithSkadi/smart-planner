@@ -1,0 +1,5 @@
+# Скопируй этот файл в local.properties (в ту же папку) и впиши свои значения.
+# local.properties не попадает в GitHub — там можно хранить токен.
+
+telegram.bot.token=ВСТАВЬ_СЮДА_ТОКЕН_ОТ_BOTFATHER
+telegram.bot.username=имя_твоего_бота
