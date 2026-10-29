@@ -68,6 +68,20 @@ public class TaskService {
         return taskRepository.findByUserIdAndDueAtGreaterThanEqualAndDueAtLessThanOrderByDueAtAsc(userId, from, to);
     }
 
+    /** Задачи за период дат включительно (по часовому поясу пользователя). */
+    @Transactional(readOnly = true)
+    public List<Task> findBetween(Long userId, LocalDate from, LocalDate to) {
+        ZoneId zone = userService.get(userId).zoneId();
+        return taskRepository.findByUserIdAndDueAtGreaterThanEqualAndDueAtLessThanOrderByDueAtAsc(userId,
+                from.atStartOfDay(zone).toInstant(), to.plusDays(1).atStartOfDay(zone).toInstant());
+    }
+
+    /** Невыполненные задачи без даты — «входящие». */
+    @Transactional(readOnly = true)
+    public List<Task> findUndated(Long userId) {
+        return taskRepository.findByUserIdAndDueAtIsNullAndDoneFalseOrderByCreatedAtAsc(userId);
+    }
+
     /** Ближайшие невыполненные задачи. */
     @Transactional(readOnly = true)
     public List<Task> findUpcoming(Long userId) {

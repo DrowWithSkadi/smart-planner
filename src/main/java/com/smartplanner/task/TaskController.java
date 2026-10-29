@@ -2,7 +2,8 @@ package com.smartplanner.task;
 
 import com.smartplanner.task.dto.TaskRequest;
 import com.smartplanner.task.dto.TaskResponse;
-import com.smartplanner.user.UserService;
+import com.smartplanner.user.AppUser;
+import com.smartplanner.webapp.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -22,63 +23,66 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 
-/**
- * REST API задач. Пока пользователь указывается в адресе (/api/users/{userId}/tasks).
- * Когда сделаем Mini App, пользователь будет определяться по данным Telegram.
- */
+/** REST API задач текущего пользователя (он определяется по данным Telegram Mini App). */
 @RestController
-@RequestMapping("/api/users/{userId}/tasks")
+@RequestMapping("/api/me/tasks")
 public class TaskController {
 
     private final TaskService taskService;
-    private final UserService userService;
 
-    public TaskController(TaskService taskService, UserService userService) {
+    public TaskController(TaskService taskService) {
         this.taskService = taskService;
-        this.userService = userService;
     }
 
-    /** Все задачи или задачи на день: GET /api/users/1/tasks?date=2026-10-29 */
+    /** Задачи за период: GET /api/me/tasks?from=2026-10-26&to=2026-11-01 (обе даты включительно). */
     @GetMapping
-    public List<TaskResponse> list(@PathVariable Long userId,
-                                   @RequestParam(required = false)
-                                   @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        ZoneId zone = userService.get(userId).zoneId();
-        List<Task> tasks = date == null ? taskService.findAll(userId) : taskService.findForDay(userId, date);
-        return tasks.stream().map(t -> TaskResponse.from(t, zone)).toList();
+    public List<TaskResponse> list(@CurrentUser AppUser user,
+                                   @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                                   @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        if (to.isBefore(from) || to.isAfter(from.plusDays(62))) {
+            throw new IllegalArgumentException("Период должен быть от 1 до 62 дней");
+        }
+        return toResponses(user, taskService.findBetween(user.getId(), from, to));
+    }
+
+    /** Задачи без даты, которые ещё не сделаны. */
+    @GetMapping("/inbox")
+    public List<TaskResponse> inbox(@CurrentUser AppUser user) {
+        return toResponses(user, taskService.findUndated(user.getId()));
     }
 
     @GetMapping("/{taskId}")
-    public TaskResponse get(@PathVariable Long userId, @PathVariable Long taskId) {
-        return toResponse(userId, taskService.get(userId, taskId));
+    public TaskResponse get(@CurrentUser AppUser user, @PathVariable Long taskId) {
+        return TaskResponse.from(taskService.get(user.getId(), taskId), user.zoneId());
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public TaskResponse create(@PathVariable Long userId, @Valid @RequestBody TaskRequest request) {
-        return toResponse(userId, taskService.create(userId, request));
+    public TaskResponse create(@CurrentUser AppUser user, @Valid @RequestBody TaskRequest request) {
+        return TaskResponse.from(taskService.create(user.getId(), request), user.zoneId());
     }
 
     @PutMapping("/{taskId}")
-    public TaskResponse update(@PathVariable Long userId, @PathVariable Long taskId,
+    public TaskResponse update(@CurrentUser AppUser user, @PathVariable Long taskId,
                                @Valid @RequestBody TaskRequest request) {
-        return toResponse(userId, taskService.update(userId, taskId, request));
+        return TaskResponse.from(taskService.update(user.getId(), taskId, request), user.zoneId());
     }
 
-    /** Отметить выполненной или снять отметку: PATCH /api/users/1/tasks/5/done?value=true */
+    /** Отметить выполненной или снять отметку: PATCH /api/me/tasks/5/done?value=true */
     @PatchMapping("/{taskId}/done")
-    public TaskResponse setDone(@PathVariable Long userId, @PathVariable Long taskId,
+    public TaskResponse setDone(@CurrentUser AppUser user, @PathVariable Long taskId,
                                 @RequestParam(defaultValue = "true") boolean value) {
-        return toResponse(userId, taskService.setDone(userId, taskId, value));
+        return TaskResponse.from(taskService.setDone(user.getId(), taskId, value), user.zoneId());
     }
 
     @DeleteMapping("/{taskId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long userId, @PathVariable Long taskId) {
-        taskService.delete(userId, taskId);
+    public void delete(@CurrentUser AppUser user, @PathVariable Long taskId) {
+        taskService.delete(user.getId(), taskId);
     }
 
-    private TaskResponse toResponse(Long userId, Task task) {
-        return TaskResponse.from(task, userService.get(userId).zoneId());
+    private static List<TaskResponse> toResponses(AppUser user, List<Task> tasks) {
+        ZoneId zone = user.zoneId();
+        return tasks.stream().map(t -> TaskResponse.from(t, zone)).toList();
     }
 }

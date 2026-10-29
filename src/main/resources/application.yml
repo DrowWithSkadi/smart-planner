@@ -36,6 +36,7 @@ logging:
 
 telegram:
   bot:
+    # Адрес Mini App (https!) — например https://xxxx.trycloudflare.com/app/  (см. README)
     # Можно задать здесь через переменную окружения TELEGRAM_BOT_TOKEN
     # или в local.properties строкой telegram.bot.token=...
     token: ${TELEGRAM_BOT_TOKEN:}
@@ -55,3 +56,9 @@ app:
     days-ahead: 60
     max-size-mb: 5
     max-per-user: 10
+  webapp:
+    # Сколько часов действительны данные входа из Telegram
+    init-data-max-age-hours: 24
+    # Режим разработки: открыть интерфейс в обычном браузере (http://localhost:8080/app/)
+    # от имени пользователя с этим Telegram ID. Задавай только в local.properties, на сервере не включай!
+    # dev-telegram-id: 123456789

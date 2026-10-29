@@ -3,7 +3,12 @@
 Умный планер задач: бэкенд на Java (Spring Boot), напоминания приходят в Telegram,
 а интерфейс — сайт, который открывается прямо в Telegram (Mini App).
 
-## Что уже умеет (версия 0.2)
+## Что уже умеет (версия 0.3)
+
+- **Mini App — интерфейс прямо в Telegram** (кнопка «Планер» в чате с ботом):
+  неделя, день на «тетрадном листе» с парами и задачами, выбор месяца,
+  добавление и редактирование задач, управление подписками на календари.
+  Вход без пароля: Telegram сам подписывает данные пользователя, сервер проверяет подпись
 
 - Telegram-бот: задачу можно добавить обычным сообщением
   - `Купить хлеб` — без времени
@@ -49,27 +54,28 @@
 
 Без токена приложение тоже запускается: работает API, а бот выключен.
 
-Проверка, что сервер жив: <http://localhost:8080>
+Проверка, что сервер жив: <http://localhost:8080>. Интерфейс — раздел «Mini App» ниже.
 
 ## API
 
-Пока пользователь указывается в адресе. `userId` можно узнать на `GET /api/users`.
+Все запросы идут от имени текущего пользователя. Mini App передаёт заголовок
+`Authorization: tma <initData>`, сервер проверяет подпись Telegram (класс `TelegramInitData`).
 
 | Метод | Адрес | Что делает |
 |---|---|---|
-| GET | `/api/users` | список пользователей |
-| GET | `/api/users/{userId}/tasks` | все задачи |
-| GET | `/api/users/{userId}/tasks?date=2026-10-29` | задачи на день |
-| POST | `/api/users/{userId}/tasks` | создать задачу |
-| PUT | `/api/users/{userId}/tasks/{taskId}` | изменить задачу |
-| PATCH | `/api/users/{userId}/tasks/{taskId}/done?value=true` | отметить выполненной |
-| DELETE | `/api/users/{userId}/tasks/{taskId}` | удалить |
-| GET | `/api/users/{userId}/calendars` | подписки на календари |
-| POST | `/api/users/{userId}/calendars` | подписаться: `{"url": "webcal://…", "name": "Учёба"}` |
-| PATCH | `/api/users/{userId}/calendars/{id}` | переименовать / выключить напоминания |
-| POST | `/api/users/{userId}/calendars/{id}/sync` | обновить прямо сейчас |
-| DELETE | `/api/users/{userId}/calendars/{id}` | отписаться |
-| GET | `/api/users/{userId}/events?from=2026-10-26&to=2026-11-01` | события календарей за период |
+| GET / PATCH | `/api/me` | профиль; PATCH `{"timezone": "Europe/Tallinn"}` |
+| GET | `/api/me/tasks?from=2026-10-26&to=2026-11-01` | задачи за период |
+| GET | `/api/me/tasks/inbox` | задачи без даты |
+| POST | `/api/me/tasks` | создать задачу |
+| PUT | `/api/me/tasks/{id}` | изменить задачу |
+| PATCH | `/api/me/tasks/{id}/done?value=true` | отметить выполненной |
+| DELETE | `/api/me/tasks/{id}` | удалить |
+| GET | `/api/me/calendars` | подписки на календари |
+| POST | `/api/me/calendars` | подписаться: `{"url": "webcal://…"}` |
+| PATCH | `/api/me/calendars/{id}` | переименовать / выключить напоминания |
+| POST | `/api/me/calendars/{id}/sync` | обновить прямо сейчас |
+| DELETE | `/api/me/calendars/{id}` | отписаться |
+| GET | `/api/me/events?from=2026-10-26&to=2026-11-01` | события календарей за период |
 
 Пример тела для создания задачи:
 
@@ -81,6 +87,42 @@
   "remindBeforeMinutes": 15
 }
 ```
+
+Ошибки приходят как `{"error": "понятный текст"}`.
+
+## Mini App
+
+Интерфейс лежит в `src/main/resources/static/app/` — обычные HTML, CSS и JavaScript без сборки.
+
+### Посмотреть в браузере (без Telegram)
+
+Добавь в `local.properties` свой Telegram ID (узнать можно у бота [@userinfobot](https://t.me/userinfobot)):
+
+```properties
+app.webapp.dev-telegram-id=123456789
+```
+
+Запусти приложение и открой <http://localhost:8080/app/>. Это режим разработки:
+все запросы без данных Telegram выполняются от имени этого пользователя. **На сервере его не включай.**
+
+### Открыть в Telegram
+
+Telegram открывает Mini App только по **https**. Для разработки удобно сделать временный
+публичный адрес через [cloudflared](https://github.com/cloudflare/cloudflared/releases)
+(регистрация не нужна, хватит одного .exe):
+
+```
+cloudflared tunnel --url http://localhost:8080
+```
+
+Он покажет адрес вида `https://something.trycloudflare.com`. Впиши его в `local.properties`:
+
+```properties
+telegram.bot.web-app-url=https://something.trycloudflare.com/app/
+```
+
+Перезапусти приложение. Бот сам поставит кнопку «Планер» слева от поля ввода.
+Адрес меняется при каждом запуске cloudflared — тогда его нужно обновить.
 
 ## Где взять ссылку на календарь
 
@@ -100,6 +142,7 @@ src/main/java/com/smartplanner/
 │   └── ics/    — скачивание и разбор .ics (не зависит от Spring)
 ├── reminder/   — планировщик, который рассылает напоминания (задачи и события)
 ├── bot/        — Telegram-бот, тексты сообщений, разбор быстрого ввода
+├── webapp/     — вход в Mini App через Telegram, профиль /api/me
 └── common/     — общие классы (ошибки)
 ```
 
@@ -107,7 +150,8 @@ src/main/java/com/smartplanner/
 
 - [x] Каркас: Spring Boot, база, задачи, бот, напоминания
 - [x] Подписка на календарь по ссылке (ICS / webcal) с автообновлением — расписание пар
-- [ ] Mini App: красивый интерфейс с календарём внутри Telegram
+- [x] Mini App: красивый интерфейс с календарём внутри Telegram
+- [ ] Выложить на сервер (постоянный https-адрес вместо cloudflared)
 - [ ] Повторяющиеся задачи (каждый день, по будням…)
 - [ ] Утренний дайджест и вечерний итог
 - [ ] Своя ICS-ссылка, чтобы видеть задачи в Apple/Google Календаре

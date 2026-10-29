@@ -17,6 +17,8 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 
     List<Task> findTop10ByUserIdAndDoneFalseAndDueAtGreaterThanEqualOrderByDueAtAsc(Long userId, Instant from);
 
+    List<Task> findByUserIdAndDueAtIsNullAndDoneFalseOrderByCreatedAtAsc(Long userId);
+
     Optional<Task> findByIdAndUserId(Long id, Long userId);
 
     /** Задачи, по которым пора отправить напоминание. Пользователь подгружается сразу (join fetch). */

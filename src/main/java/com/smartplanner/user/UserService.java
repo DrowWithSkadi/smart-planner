@@ -5,6 +5,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DateTimeException;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,16 +24,32 @@ public class UserService {
 
     /**
      * Находит пользователя по Telegram ID или создаёт нового.
-     * Заодно обновляет имя и чат — они могут поменяться.
+     * Заодно обновляет имя и чат — они могут поменяться. Пишет в базу, только если что-то изменилось.
      */
     @Transactional
     public AppUser findOrCreate(Long telegramId, Long chatId, String firstName, String username) {
-        AppUser user = repository.findByTelegramId(telegramId)
-                .orElseGet(() -> new AppUser(telegramId, chatId, firstName, username, defaultTimezone));
+        Optional<AppUser> existing = repository.findByTelegramId(telegramId);
+        if (existing.isEmpty()) {
+            return repository.save(new AppUser(telegramId, chatId, firstName, username, defaultTimezone));
+        }
+        AppUser user = existing.get();
         user.setChatId(chatId);
         user.setFirstName(firstName);
         user.setUsername(username);
-        return repository.save(user);
+        return user; // изменения сохранятся сами при завершении транзакции (если они были)
+    }
+
+    /** Меняет часовой пояс, например на "Europe/Tallinn". */
+    @Transactional
+    public AppUser setTimezone(Long userId, String timezone) {
+        try {
+            ZoneId.of(timezone);
+        } catch (DateTimeException e) {
+            throw new IllegalArgumentException("Неизвестный часовой пояс: " + timezone);
+        }
+        AppUser user = get(userId);
+        user.setTimezone(timezone);
+        return user;
     }
 
     @Transactional(readOnly = true)

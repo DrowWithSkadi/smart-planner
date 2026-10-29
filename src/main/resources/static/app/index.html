@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+    <title>Планер</title>
+    <!-- SDK Telegram Mini Apps: даёт данные пользователя, тему и кнопки Telegram -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+    <!-- Экран «План» -->
+    <section id="screen-plan" class="screen" aria-label="План">
+        <header class="top">
+            <button id="month-title" class="month-title" type="button" aria-haspopup="dialog">Октябрь</button>
+            <button id="today-btn" class="text-btn" type="button">Сегодня</button>
+        </header>
+
+        <nav id="week" class="week" aria-label="Дни недели"></nav>
+
+        <div id="day-head" class="day-head"></div>
+        <div id="allday" class="allday"></div>
+
+        <div id="sheet-paper" class="paper" aria-label="Расписание дня">
+            <div id="timeline" class="timeline"></div>
+        </div>
+
+        <section id="inbox" class="inbox" hidden>
+            <h2 class="section-title">Без даты</h2>
+            <ul id="inbox-list" class="task-list"></ul>
+        </section>
+    </section>
+
+    <!-- Экран «Календари» -->
+    <section id="screen-calendars" class="screen" aria-label="Календари" hidden>
+        <header class="top">
+            <h1 class="month-title static">Календари</h1>
+        </header>
+        <ul id="calendar-list" class="calendar-list"></ul>
+
+        <form id="subscribe-form" class="subscribe">
+            <label for="subscribe-url" class="field-label">Ссылка на календарь</label>
+            <input id="subscribe-url" class="input" type="url" inputmode="url" autocomplete="off"
+                   placeholder="webcal://… или https://….ics" required>
+            <button class="primary-btn" type="submit">Подписаться</button>
+            <p class="hint">
+                Google: настройки календаря → «Секретный адрес в формате iCal».
+                iCloud: ⓘ у календаря → «Публичный календарь».
+                Расписание учёбы: ищи кнопку «Экспорт в iCal» или «Подписка».
+            </p>
+        </form>
+    </section>
+
+    <button id="add-btn" class="fab" type="button" aria-label="Новая задача">+</button>
+
+    <nav class="tabs" aria-label="Разделы">
+        <button class="tab" data-screen="plan" aria-current="page" type="button">План</button>
+        <button class="tab" data-screen="calendars" type="button">Календари</button>
+    </nav>
+</div>
+
+<!-- Окно задачи -->
+<div id="task-sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="task-sheet-title" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <form id="task-form" class="sheet-body">
+        <div class="sheet-grip" aria-hidden="true"></div>
+        <h2 id="task-sheet-title" class="sheet-title">Новая задача</h2>
+
+        <input id="task-title" class="input big" type="text" maxlength="200" placeholder="Что нужно сделать?" required>
+
+        <div class="row">
+            <div class="col">
+                <label for="task-date" class="field-label">Дата</label>
+                <input id="task-date" class="input" type="date">
+            </div>
+            <div class="col">
+                <label for="task-time" class="field-label">Время</label>
+                <input id="task-time" class="input" type="time">
+            </div>
+        </div>
+
+        <label for="task-remind" class="field-label">Напомнить</label>
+        <select id="task-remind" class="input">
+            <option value="0">В момент начала</option>
+            <option value="5">За 5 минут</option>
+            <option value="15" selected>За 15 минут</option>
+            <option value="30">За 30 минут</option>
+            <option value="60">За час</option>
+            <option value="1440">За день</option>
+        </select>
+
+        <label for="task-desc" class="field-label">Заметка</label>
+        <textarea id="task-desc" class="input" rows="3" maxlength="2000"></textarea>
+
+        <div class="sheet-actions">
+            <button id="task-delete" class="danger-btn" type="button" hidden>Удалить</button>
+            <button class="primary-btn" type="submit">Сохранить</button>
+        </div>
+    </form>
+</div>
+
+<!-- Окно события календаря (только просмотр) -->
+<div id="event-sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="event-title" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-body">
+        <div class="sheet-grip" aria-hidden="true"></div>
+        <p id="event-calendar" class="event-calendar"></p>
+        <h2 id="event-title" class="sheet-title"></h2>
+        <p id="event-time" class="event-line"></p>
+        <p id="event-location" class="event-line"></p>
+        <p id="event-desc" class="event-desc"></p>
+        <p class="hint">Событие из подписанного календаря — изменить его можно только в источнике.</p>
+    </div>
+</div>
+
+<!-- Окно выбора месяца -->
+<div id="month-sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="month-sheet-title" hidden>
+    <div class="sheet-backdrop" data-close></div>
+    <div class="sheet-body">
+        <div class="sheet-grip" aria-hidden="true"></div>
+        <div class="month-nav">
+            <button id="month-prev" class="icon-btn" type="button" aria-label="Предыдущий месяц">‹</button>
+            <h2 id="month-sheet-title" class="sheet-title">Октябрь 2026</h2>
+            <button id="month-next" class="icon-btn" type="button" aria-label="Следующий месяц">›</button>
+        </div>
+        <div id="month-grid" class="month-grid"></div>
+    </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<div id="fatal" class="fatal" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>

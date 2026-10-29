@@ -15,4 +15,6 @@ long polling), позже — Telegram Mini App как фронтенд. Авт�
 - Календари: `calendar/ics` — чистая логика без Spring (IcsParser, IcsFetcher), тестируется отдельно.
   События хранятся развёрнутыми (одна строка на повторение), ключ — (subscription, uid, startAt).
   Скачивание — вне транзакции, запись — в TransactionTemplate.
+- REST API — только `/api/me/...`; пользователь берётся через `@CurrentUser AppUser` (подпись Telegram initData).
+- Mini App: `static/app/` — ванильный JS без сборки, цвета из темы Telegram (`--tg-theme-*`), идея дизайна — день на тетрадном листе в клетку.
 - Напоминания идут через `reminder.Reminder` (общий вид для задач и событий) → `ReminderSender`.

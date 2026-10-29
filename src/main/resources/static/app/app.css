@@ -1,0 +1,479 @@
+/*
+ * Smart Planner — Mini App.
+ * Цвета берём из темы Telegram (--tg-theme-*), чтобы приложение выглядело родным
+ * и в светлой, и в тёмной теме. Своё у нас одно: день нарисован на «тетрадном листе в клетку»
+ * с красной линией полей — как в школьной тетради с расписанием.
+ */
+
+:root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --bg-2: var(--tg-theme-secondary-bg-color, #f1f2f5);
+    --text: var(--tg-theme-text-color, #15171c);
+    --hint: var(--tg-theme-hint-color, #8a8f99);
+    --accent: var(--tg-theme-button-color, #2f6fe4);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --danger: var(--tg-theme-destructive-text-color, #d93a3a);
+
+    /* тетрадь */
+    --cell: 14px;                                   /* одна клетка */
+    --hour: calc(var(--cell) * 4);                  /* час = 4 клетки */
+    --grid: color-mix(in srgb, var(--hint) 16%, transparent);
+    --margin-line: #e0525a;                         /* красная линия полей */
+
+    /* цвета календарей — как разные ручки */
+    --pen-1: #2f5bea;
+    --pen-2: #2e9a6a;
+    --pen-3: #8a4fd8;
+    --pen-4: #c98a12;
+    --pen-5: #d2456b;
+
+    --radius-s: 8px;
+    --radius-l: 18px;
+    --font: "Golos Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: light dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; } /* иначе display из классов перебивает атрибут hidden */
+
+html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+#app { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+.screen { padding: 0 16px; }
+
+/* ---------- Шапка ---------- */
+
+.top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0 6px;
+}
+.month-title {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-transform: capitalize;
+}
+.month-title:not(.static)::after {
+    content: "";
+    display: inline-block;
+    width: 7px; height: 7px;
+    margin: 0 0 5px 8px;
+    border-right: 2px solid var(--hint);
+    border-bottom: 2px solid var(--hint);
+    transform: rotate(45deg);
+}
+.text-btn {
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font-weight: 500;
+    padding: 6px 0;
+}
+
+/* ---------- Неделя ---------- */
+
+.week {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    padding: 6px 0 10px;
+    touch-action: pan-y;
+}
+.day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 0 8px;
+    border: 0;
+    border-radius: 12px;
+    background: none;
+}
+.day-name { font-size: 12px; color: var(--hint); text-transform: lowercase; }
+.day-num {
+    display: grid;
+    place-items: center;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    font-size: 17px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+.day.is-today .day-num { color: var(--accent); font-weight: 700; }
+.day[aria-selected="true"] .day-num { background: var(--accent); color: var(--accent-text); }
+.day-dots { display: flex; gap: 3px; height: 5px; }
+.day-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--hint); }
+
+/* ---------- Заголовок дня ---------- */
+
+.day-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 4px 0 8px;
+    color: var(--hint);
+    font-size: 14px;
+}
+.day-head strong { color: var(--text); font-size: 17px; font-weight: 600; }
+
+.allday { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.allday:empty { display: none; }
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 5px 10px;
+    border: 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--pen) 14%, var(--bg));
+    color: var(--text);
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.chip::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--pen); }
+
+/* ---------- Тетрадный лист ---------- */
+
+.paper {
+    position: relative;
+    margin: 0 -16px;
+    padding: var(--cell) 16px var(--cell) 0;
+    background-color: var(--bg);
+    background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: var(--cell) var(--cell);
+    background-position: -1px -1px;
+    border-top: 1px solid var(--grid);
+    border-bottom: 1px solid var(--grid);
+}
+
+.timeline { position: relative; margin-left: 56px; }
+
+/* красная линия полей */
+.timeline::before {
+    content: "";
+    position: absolute;
+    top: calc(var(--cell) * -1);
+    bottom: calc(var(--cell) * -1);
+    left: -1px;
+    width: 2px;
+    background: color-mix(in srgb, var(--margin-line) 65%, transparent);
+}
+
+.hour-label {
+    position: absolute;
+    left: -50px;
+    width: 40px;
+    transform: translateY(-50%);
+    text-align: right;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--hint);
+    font-variant-numeric: tabular-nums;
+}
+
+.now-line {
+    position: absolute;
+    left: -5px; right: 0;
+    height: 2px;
+    background: var(--accent);
+    z-index: 0; /* под событиями, чтобы не перечёркивать их названия */
+    pointer-events: none;
+}
+.now-line::before {
+    content: "";
+    position: absolute;
+    left: -4px; top: -4px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+/* событие из календаря */
+.event {
+    position: absolute;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 4px 8px 4px 10px;
+    overflow: hidden;
+    border: 0;
+    border-left: 3px solid var(--pen);
+    border-radius: 0 var(--radius-s) var(--radius-s) 0;
+    background: color-mix(in srgb, var(--pen) 14%, var(--bg));
+    text-align: left;
+}
+.event-title { font-size: 14px; font-weight: 600; line-height: 1.25; }
+.event-meta { font-size: 12px; color: var(--hint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.event.is-short { flex-direction: row; align-items: center; gap: 6px; padding-top: 0; padding-bottom: 0; }
+.event.is-past { opacity: 0.55; }
+
+/* задача со временем — строчка в тетради */
+.task-line {
+    position: absolute;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: calc(var(--cell) * 2 - 2px);
+    padding-left: 4px;
+}
+.task-line .task-text { flex: 1; min-width: 0; border: 0; background: none; padding: 0; text-align: left; }
+
+.check {
+    flex: none;
+    position: relative;
+    width: 22px; height: 22px;
+    border: 2px solid var(--accent);
+    border-radius: 6px;
+    background: var(--bg);
+    padding: 0;
+}
+.check[aria-checked="true"] { background: var(--accent); }
+.check[aria-checked="true"]::after {
+    content: "";
+    position: absolute;
+    left: 6px; top: 2px;
+    width: 5px; height: 10px;
+    border-right: 2px solid var(--accent-text);
+    border-bottom: 2px solid var(--accent-text);
+    transform: rotate(45deg);
+}
+.task-text { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.task-time { color: var(--hint); font-variant-numeric: tabular-nums; margin-right: 6px; }
+.is-done .task-text { color: var(--hint); text-decoration: line-through; }
+
+.empty-day {
+    position: absolute;
+    left: 12px; right: 0;
+    color: var(--hint);
+    font-size: 15px;
+}
+
+/* ---------- Без даты ---------- */
+
+.inbox { padding-top: 20px; }
+.section-title { margin: 0 0 6px; font-size: 17px; font-weight: 600; }
+.task-list { list-style: none; margin: 0; padding: 0; }
+.task-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    border-bottom: 1px solid var(--grid);
+}
+.task-item .task-text { flex: 1; min-width: 0; border: 0; background: none; padding: 10px 0; text-align: left; }
+
+/* ---------- Календари ---------- */
+
+.calendar-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.calendar-item {
+    display: grid;
+    grid-template-columns: 12px 1fr auto;
+    gap: 4px 12px;
+    align-items: center;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--grid);
+}
+.calendar-item .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--pen); }
+.calendar-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-status { grid-column: 2 / 4; font-size: 13px; color: var(--hint); }
+.calendar-status.is-error { color: var(--danger); }
+.calendar-actions { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.small-btn {
+    padding: 6px 12px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--bg-2);
+    font-size: 14px;
+}
+.small-btn.is-danger { color: var(--danger); }
+.switch { display: flex; flex-basis: 100%; align-items: center; gap: 8px; font-size: 14px; }
+.switch input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+.empty-list { padding: 18px 0; color: var(--hint); }
+
+.subscribe { display: flex; flex-direction: column; gap: 10px; padding: 24px 0 8px; }
+
+/* ---------- Поля и кнопки ---------- */
+
+.field-label { display: block; margin: 12px 0 4px; font-size: 13px; color: var(--hint); }
+.subscribe .field-label { margin-top: 0; }
+.input {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-s);
+    background: var(--bg-2);
+    font-size: 16px; /* 16px — чтобы iOS не увеличивал страницу при фокусе */
+}
+.input:focus { border-color: var(--accent); outline: none; }
+.input.big { font-size: 18px; font-weight: 500; }
+textarea.input { resize: vertical; }
+
+.primary-btn, .danger-btn {
+    min-height: 48px;
+    padding: 0 20px;
+    border: 0;
+    border-radius: 12px;
+    font-weight: 600;
+}
+.primary-btn { background: var(--accent); color: var(--accent-text); }
+.primary-btn:disabled { opacity: 0.6; }
+.danger-btn { background: none; color: var(--danger); }
+.icon-btn {
+    width: 40px; height: 40px;
+    border: 0; border-radius: 50%;
+    background: var(--bg-2);
+    font-size: 22px; line-height: 1;
+}
+.hint { margin: 0; font-size: 13px; color: var(--hint); }
+
+/* ---------- Кнопка «+» и вкладки ---------- */
+
+.fab {
+    position: fixed;
+    right: 16px;
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    z-index: 10;
+    width: 56px; height: 56px;
+    border: 0;
+    border-radius: 18px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: 30px;
+    font-weight: 400;
+    line-height: 1;
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.tabs {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 6px 16px calc(6px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--grid);
+}
+.tab {
+    min-height: 44px;
+    border: 0;
+    border-radius: 12px;
+    background: none;
+    color: var(--hint);
+    font-weight: 500;
+}
+.tab[aria-current="page"] { color: var(--text); font-weight: 600; background: var(--bg-2); }
+
+/* ---------- Нижние окна ---------- */
+
+.sheet { position: fixed; inset: 0; z-index: 20; }
+.sheet-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.35); }
+.sheet-body {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    max-height: 92vh;
+    overflow-y: auto;
+    padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+    border-radius: var(--radius-l) var(--radius-l) 0 0;
+    background: var(--bg);
+    animation: sheet-in 220ms cubic-bezier(.2, .8, .2, 1);
+}
+.sheet-grip { width: 36px; height: 4px; margin: 0 auto 12px; border-radius: 2px; background: var(--grid); }
+.sheet-title { margin: 0 0 12px; font-size: 20px; font-weight: 700; }
+.sheet-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 20px; }
+.sheet-actions .primary-btn { flex: 1; }
+.row { display: flex; gap: 10px; }
+.col { flex: 1; min-width: 0; }
+
+.event-calendar { margin: 0 0 4px; font-size: 13px; color: var(--pen); font-weight: 600; }
+.event-line { margin: 0 0 4px; }
+.event-line:empty, .event-desc:empty { display: none; }
+.event-desc { margin: 12px 0; white-space: pre-wrap; color: var(--hint); font-size: 15px; }
+
+.month-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.month-nav .sheet-title { margin: 0; text-transform: capitalize; }
+.month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
+.month-grid .wd { font-size: 12px; color: var(--hint); padding: 4px 0; }
+.month-day {
+    position: relative;
+    aspect-ratio: 1;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    font-variant-numeric: tabular-nums;
+}
+.month-day.is-other { color: var(--hint); opacity: 0.5; }
+.month-day.is-today { color: var(--accent); font-weight: 700; }
+.month-day[aria-selected="true"] { background: var(--accent); color: var(--accent-text); }
+.month-day.has-items::after {
+    content: "";
+    position: absolute;
+    left: 50%; bottom: 6px;
+    width: 4px; height: 4px;
+    margin-left: -2px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.6;
+}
+
+/* ---------- Сообщения ---------- */
+
+.toast {
+    position: fixed;
+    left: 16px; right: 16px;
+    bottom: calc(140px + env(safe-area-inset-bottom));
+    z-index: 30;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: var(--text);
+    color: var(--bg);
+    font-size: 15px;
+    text-align: center;
+}
+.fatal {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    place-items: center;
+    padding: 32px;
+    background: var(--bg);
+    text-align: center;
+    color: var(--hint);
+}
+
+@keyframes sheet-in { from { transform: translateY(100%); } to { transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+    .sheet-body { animation: none; }
+}

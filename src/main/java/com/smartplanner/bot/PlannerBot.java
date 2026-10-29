@@ -14,14 +14,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
+import org.telegram.telegrambots.longpolling.starter.AfterBotRegistration;
 import org.telegram.telegrambots.longpolling.starter.SpringLongPollingBot;
 import org.telegram.telegrambots.longpolling.util.DefaultLongPollingUpdateConsumer;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethod;
+import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
+import org.telegram.telegrambots.meta.api.methods.menubutton.SetChatMenuButton;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
+import org.telegram.telegrambots.meta.api.objects.menubutton.MenuButtonWebApp;
 import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.message.MaybeInaccessibleMessage;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
@@ -77,6 +82,30 @@ public class PlannerBot extends DefaultLongPollingUpdateConsumer implements Spri
     @Override
     public LongPollingUpdateConsumer getUpdatesConsumer() {
         return this;
+    }
+
+    /**
+     * После запуска бота: регистрируем список команд (появится в меню «/» в Telegram)
+     * и, если задан адрес Mini App, кнопку «Планер» слева от поля ввода.
+     */
+    @AfterBotRegistration
+    public void afterRegistration() {
+        execute(SetMyCommands.builder()
+                .command(new BotCommand("today", "План на сегодня"))
+                .command(new BotCommand("tomorrow", "План на завтра"))
+                .command(new BotCommand("list", "Ближайшие задачи"))
+                .command(new BotCommand("calendars", "Мои календари"))
+                .command(new BotCommand("help", "Подсказка"))
+                .build());
+        if (properties.hasWebApp()) {
+            execute(SetChatMenuButton.builder()
+                    .menuButton(MenuButtonWebApp.builder()
+                            .text("Планер")
+                            .webAppInfo(new WebAppInfo(properties.webAppUrl()))
+                            .build())
+                    .build());
+            log.info("Кнопка Mini App установлена: {}", properties.webAppUrl());
+        }
     }
 
     @Override
