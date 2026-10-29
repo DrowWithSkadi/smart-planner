@@ -47,3 +47,11 @@ app:
   reminders:
     default-before-minutes: 15
     check-interval-ms: 30000
+  calendar:
+    # Как часто перекачивать календари (30 минут)
+    sync-interval-ms: 1800000
+    # Сколько дней прошлого хранить и на сколько дней вперёд разворачивать повторения
+    days-behind: 7
+    days-ahead: 60
+    max-size-mb: 5
+    max-per-user: 10

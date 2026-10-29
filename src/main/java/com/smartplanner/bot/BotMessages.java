@@ -1,5 +1,8 @@
 package com.smartplanner.bot;
 
+import com.smartplanner.calendar.CalendarEvent;
+import com.smartplanner.calendar.CalendarSubscription;
+import com.smartplanner.reminder.Reminder;
 import com.smartplanner.task.Task;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
@@ -11,6 +14,8 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /** Тексты и кнопки, которые отправляет бот. Собраны в одном месте, чтобы их было легко менять. */
@@ -19,6 +24,8 @@ final class BotMessages {
     static final String CB_DONE = "done";
     static final String CB_SNOOZE = "snooze";
     static final String CB_DELETE = "del";
+    static final String CB_UNSUBSCRIBE = "unsub";
+    static final String CB_SYNC = "sync";
 
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("dd.MM HH:mm");
@@ -29,7 +36,7 @@ final class BotMessages {
     static String welcome(String firstName) {
         String name = firstName == null || firstName.isBlank() ? "" : ", " + firstName;
         return "Привет" + name + "! 👋\n\n"
-                + "Я Smart Planner: записываю задачи и напоминаю о них.\n\n"
+                + "Я Smart Planner: записываю задачи, подтягиваю расписание из календарей и напоминаю о делах.\n\n"
                 + help();
     }
 
@@ -41,12 +48,17 @@ final class BotMessages {
                 • завтра 9:30 Пара по Java
                 • 29.10 18:00 Встреча
 
+                Чтобы подписаться на календарь (расписание, Google, iCloud), пришли ссылку на него — \
+                webcal://… или https://….ics
+
                 Команды:
-                /today — задачи на сегодня
+                /today — план на сегодня
+                /tomorrow — план на завтра
                 /list — ближайшие задачи
+                /calendars — мои календари
                 /help — эта подсказка
 
-                Напоминание придёт за 15 минут до задачи.""";
+                Напоминание придёт за 15 минут до задачи или события.""";
     }
 
     static String taskCreated(Task task, ZoneId zone) {
@@ -75,19 +87,95 @@ final class BotMessages {
         return sb.toString();
     }
 
-    static String reminder(Task task, ZoneId zone) {
-        StringBuilder sb = new StringBuilder("⏰ Напоминание\n\n").append(task.getTitle());
-        if (task.getDueAt() != null) {
-            sb.append("\n🕒 ").append(TIME.format(task.getDueAt().atZone(zone)));
-            long minutes = Duration.between(Instant.now(), task.getDueAt()).toMinutes();
+    /** План на день: события календарей и задачи вместе, по времени. */
+    static String agenda(String header, List<Task> tasks, List<CalendarEvent> events, ZoneId zone, String emptyText) {
+        if (tasks.isEmpty() && events.isEmpty()) {
+            return emptyText;
+        }
+        record Line(Instant at, boolean allDay, String text) {
+        }
+        List<Line> lines = new ArrayList<>();
+        for (CalendarEvent e : events) {
+            StringBuilder sb = new StringBuilder("📅 ");
+            sb.append(e.isAllDay() ? "весь день" : TIME.format(e.getStartAt().atZone(zone))
+                    + "–" + TIME.format(e.getEndAt().atZone(zone)));
+            sb.append(" — ").append(e.getTitle());
+            if (e.getLocation() != null) {
+                sb.append(" (").append(e.getLocation()).append(")");
+            }
+            lines.add(new Line(e.getStartAt(), e.isAllDay(), sb.toString()));
+        }
+        for (Task t : tasks) {
+            String time = t.getDueAt() == null ? "" : TIME.format(t.getDueAt().atZone(zone)) + " — ";
+            lines.add(new Line(t.getDueAt() == null ? Instant.MAX : t.getDueAt(), false,
+                    (t.isDone() ? "✅ " : "▫️ ") + time + t.getTitle()));
+        }
+        // сначала события на весь день, потом всё остальное по времени
+        lines.sort(Comparator.comparing(Line::allDay).reversed().thenComparing(Line::at));
+
+        StringBuilder sb = new StringBuilder(header).append("\n");
+        lines.forEach(l -> sb.append("\n").append(l.text()));
+        return sb.toString();
+    }
+
+    static String reminder(Reminder reminder, ZoneId zone) {
+        String icon = reminder.source() == Reminder.Source.CALENDAR_EVENT ? "📅" : "⏰";
+        StringBuilder sb = new StringBuilder(icon).append(" Напоминание\n\n").append(reminder.title());
+        if (reminder.startAt() != null) {
+            sb.append("\n🕒 ").append(TIME.format(reminder.startAt().atZone(zone)));
+            long minutes = Duration.between(Instant.now(), reminder.startAt()).toMinutes();
             if (minutes > 0) {
                 sb.append(" (через ").append(minutes).append(" мин)");
             }
         }
-        if (task.getDescription() != null && !task.getDescription().isBlank()) {
-            sb.append("\n\n").append(task.getDescription());
+        if (reminder.location() != null) {
+            sb.append("\n📍 ").append(reminder.location());
+        }
+        if (reminder.calendarName() != null) {
+            sb.append("\n🗂 ").append(reminder.calendarName());
+        }
+        if (reminder.description() != null && !reminder.description().isBlank()) {
+            String text = reminder.description();
+            sb.append("\n\n").append(text.length() > 500 ? text.substring(0, 500) + "…" : text);
         }
         return sb.toString();
+    }
+
+    static String calendarSubscribed(CalendarSubscription subscription, int eventCount) {
+        return "📅 Подписался на календарь «" + subscription.getName() + "»\n"
+                + "Загружено событий: " + eventCount + "\n\n"
+                + "Календарь будет обновляться сам каждые 30 минут. "
+                + "О событиях напомню за 15 минут. Посмотреть план — /today";
+    }
+
+    static String calendarList(List<CalendarSubscription> subscriptions, ZoneId zone) {
+        if (subscriptions.isEmpty()) {
+            return "Календарей пока нет.\n\nПришли ссылку на календарь (webcal://… или https://….ics), "
+                    + "и я буду подтягивать из него события.";
+        }
+        StringBuilder sb = new StringBuilder("🗂 Твои календари:\n");
+        int i = 1;
+        for (CalendarSubscription s : subscriptions) {
+            sb.append("\n").append(i++).append(". ").append(s.getName());
+            if (s.getLastError() != null) {
+                sb.append("\n   ⚠️ ").append(s.getLastError());
+            } else if (s.getLastSyncedAt() != null) {
+                sb.append("\n   обновлён ").append(DATE_TIME.format(s.getLastSyncedAt().atZone(zone)));
+            }
+        }
+        return sb.toString();
+    }
+
+    static InlineKeyboardMarkup calendarButtons(List<CalendarSubscription> subscriptions) {
+        InlineKeyboardMarkup.InlineKeyboardMarkupBuilder<?, ?> builder = InlineKeyboardMarkup.builder();
+        int i = 1;
+        for (CalendarSubscription s : subscriptions) {
+            builder.keyboardRow(new InlineKeyboardRow(
+                    button("🔄 " + i, CB_SYNC + ":" + s.getId()),
+                    button("🗑 Отписаться от " + i, CB_UNSUBSCRIBE + ":" + s.getId())));
+            i++;
+        }
+        return builder.build();
     }
 
     static InlineKeyboardMarkup reminderButtons(Long taskId) {

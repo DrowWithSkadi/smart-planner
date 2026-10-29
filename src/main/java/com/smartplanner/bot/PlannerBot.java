@@ -1,5 +1,9 @@
 package com.smartplanner.bot;
 
+import com.smartplanner.calendar.CalendarService;
+import com.smartplanner.calendar.CalendarSubscription;
+import com.smartplanner.calendar.CalendarSyncService;
+import com.smartplanner.calendar.ics.IcsException;
 import com.smartplanner.common.NotFoundException;
 import com.smartplanner.task.Task;
 import com.smartplanner.task.TaskService;
@@ -32,6 +36,8 @@ import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * Telegram-бот: принимает сообщения и нажатия на кнопки.
@@ -43,17 +49,24 @@ public class PlannerBot extends DefaultLongPollingUpdateConsumer implements Spri
 
     private static final Logger log = LoggerFactory.getLogger(PlannerBot.class);
 
+    /** Сообщение похоже на ссылку на календарь: webcal://… или http(s)://…ics */
+    private static final Pattern CALENDAR_URL = Pattern.compile(
+            "^(webcals?://\\S+|https?://\\S*(\\.ics|ical|calendar|webcal)\\S*)$",
+            Pattern.CASE_INSENSITIVE);
+
     private final BotProperties properties;
     private final TelegramClient telegram;
     private final UserService userService;
     private final TaskService taskService;
+    private final CalendarService calendarService;
 
     public PlannerBot(BotProperties properties, TelegramClient telegram,
-                      UserService userService, TaskService taskService) {
+                      UserService userService, TaskService taskService, CalendarService calendarService) {
         this.properties = properties;
         this.telegram = telegram;
         this.userService = userService;
         this.taskService = taskService;
+        this.calendarService = calendarService;
     }
 
     @Override
@@ -89,24 +102,36 @@ public class PlannerBot extends DefaultLongPollingUpdateConsumer implements Spri
         String text = message.getText().trim();
 
         // "/add@MyBot купить" → команда "/add", аргумент "купить"
-        String command = text.startsWith("/") ? text.split("\\s+", 2)[0].split("@")[0].toLowerCase() : "";
+        String command = text.startsWith("/") ? text.split("\\s+", 2)[0].split("@")[0].toLowerCase(Locale.ROOT) : "";
         String argument = text.startsWith("/") && text.contains(" ") ? text.substring(text.indexOf(' ') + 1).trim() : "";
 
         switch (command) {
             case "/start" -> send(user.getChatId(), BotMessages.welcome(from.getFirstName()), startButtons());
             case "/help" -> send(user.getChatId(), BotMessages.help(), null);
-            case "/today" -> {
-                List<Task> tasks = taskService.findForDay(user.getId(), LocalDate.now(zone));
-                send(user.getChatId(), BotMessages.taskList("📅 Задачи на сегодня:", tasks, zone,
-                        "На сегодня задач нет 🎉"), null);
-            }
+            case "/today" -> sendAgenda(user, LocalDate.now(zone), "📅 План на сегодня:", "На сегодня ничего нет 🎉");
+            case "/tomorrow" -> sendAgenda(user, LocalDate.now(zone).plusDays(1), "📅 План на завтра:",
+                    "На завтра ничего нет 🎉");
             case "/list" -> {
                 List<Task> tasks = taskService.findUpcoming(user.getId());
                 send(user.getChatId(), BotMessages.taskList("🗂 Ближайшие задачи:", tasks, zone,
                         "Предстоящих задач нет. Напиши, например: завтра 10:00 Сходить в зал"), null);
             }
             case "/add" -> addTask(user, argument);
-            case "" -> addTask(user, text); // обычный текст без команды — тоже новая задача
+            case "/calendars" -> sendCalendars(user);
+            case "/subscribe" -> {
+                if (argument.isBlank()) {
+                    send(user.getChatId(), "Пришли ссылку так: /subscribe webcal://… или просто отправь ссылку", null);
+                } else {
+                    subscribe(user, argument);
+                }
+            }
+            case "" -> {
+                if (CALENDAR_URL.matcher(text).matches()) {
+                    subscribe(user, text); // прислали ссылку на календарь — подписываемся
+                } else {
+                    addTask(user, text); // обычный текст без команды — новая задача
+                }
+            }
             default -> send(user.getChatId(), "Не знаю такую команду. Список команд — /help", null);
         }
     }
@@ -123,6 +148,31 @@ public class PlannerBot extends DefaultLongPollingUpdateConsumer implements Spri
         }
     }
 
+    private void sendAgenda(AppUser user, LocalDate day, String header, String emptyText) {
+        ZoneId zone = user.zoneId();
+        List<Task> tasks = taskService.findForDay(user.getId(), day);
+        var events = calendarService.findForDay(user.getId(), day);
+        send(user.getChatId(), BotMessages.agenda(header, tasks, events, zone, emptyText), null);
+    }
+
+    // ---------- Календари ----------
+
+    private void subscribe(AppUser user, String url) {
+        send(user.getChatId(), "⏳ Загружаю календарь…", null);
+        try {
+            CalendarService.SubscribeResult result = calendarService.subscribe(user.getId(), url, null);
+            send(user.getChatId(), BotMessages.calendarSubscribed(result.subscription(), result.eventCount()), null);
+        } catch (IcsException e) {
+            send(user.getChatId(), "⚠️ " + e.getMessage(), null);
+        }
+    }
+
+    private void sendCalendars(AppUser user) {
+        List<CalendarSubscription> subscriptions = calendarService.list(user.getId());
+        send(user.getChatId(), BotMessages.calendarList(subscriptions, user.zoneId()),
+                subscriptions.isEmpty() ? null : BotMessages.calendarButtons(subscriptions));
+    }
+
     // ---------- Нажатия на кнопки ----------
 
     private void handleCallback(CallbackQuery callback) {
@@ -132,24 +182,36 @@ public class PlannerBot extends DefaultLongPollingUpdateConsumer implements Spri
             AppUser user = userService.findByTelegramId(callback.getFrom().getId())
                     .orElseThrow(() -> new NotFoundException("Сначала напиши /start"));
             String[] parts = callback.getData().split(":");
-            Long taskId = Long.parseLong(parts[1]);
+            Long id = Long.parseLong(parts[1]); // ID задачи или календаря — зависит от кнопки
 
             switch (parts[0]) {
                 case BotMessages.CB_DONE -> {
-                    taskService.setDone(user.getId(), taskId, true);
+                    taskService.setDone(user.getId(), id, true);
                     answer = "Отмечено как выполненное";
                     status = "✅ Выполнено";
                 }
                 case BotMessages.CB_SNOOZE -> {
                     int minutes = Integer.parseInt(parts[2]);
-                    taskService.snooze(user.getId(), taskId, minutes);
+                    taskService.snooze(user.getId(), id, minutes);
                     answer = "Напомню через " + minutes + " мин";
                     status = "⏰ Отложено на " + minutes + " мин";
                 }
                 case BotMessages.CB_DELETE -> {
-                    taskService.delete(user.getId(), taskId);
+                    taskService.delete(user.getId(), id);
                     answer = "Задача удалена";
                     status = "🗑 Удалено";
+                }
+                case BotMessages.CB_UNSUBSCRIBE -> {
+                    String name = calendarService.get(user.getId(), id).getName();
+                    calendarService.unsubscribe(user.getId(), id);
+                    answer = "Отписался от «" + name + "»";
+                    status = "🗑 Отписался от «" + name + "»";
+                }
+                case BotMessages.CB_SYNC -> {
+                    CalendarSyncService.SyncResult result = calendarService.syncNow(user.getId(), id);
+                    answer = result.ok()
+                            ? (result.notModified() ? "Изменений нет" : "Обновлено, событий: " + (result.added() + result.updated()))
+                            : "Ошибка: " + result.error();
                 }
                 default -> answer = "Неизвестное действие";
             }

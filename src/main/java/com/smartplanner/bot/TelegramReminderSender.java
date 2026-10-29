@@ -1,13 +1,13 @@
 package com.smartplanner.bot;
 
+import com.smartplanner.reminder.Reminder;
 import com.smartplanner.reminder.ReminderSender;
-import com.smartplanner.task.Task;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
-/** Отправляет напоминания в Telegram с кнопками «Готово» и «Отложить». */
+/** Отправляет напоминания в Telegram. У задач есть кнопки «Готово» и «Отложить». */
 @Component
 @ConditionalOnBotToken
 public class TelegramReminderSender implements ReminderSender {
@@ -19,16 +19,18 @@ public class TelegramReminderSender implements ReminderSender {
     }
 
     @Override
-    public void send(Task task) throws Exception {
+    public void send(Reminder reminder) throws Exception {
         SendMessage message = SendMessage.builder()
-                .chatId(task.getUser().getChatId())
-                .text(BotMessages.reminder(task, task.getUser().zoneId()))
-                .replyMarkup(BotMessages.reminderButtons(task.getId()))
+                .chatId(reminder.user().getChatId())
+                .text(BotMessages.reminder(reminder, reminder.user().zoneId()))
                 .build();
+        if (reminder.source() == Reminder.Source.TASK) {
+            message.setReplyMarkup(BotMessages.reminderButtons(reminder.refId()));
+        }
         try {
             telegram.execute(message);
         } catch (TelegramApiException e) {
-            throw new Exception("Telegram не принял напоминание для задачи " + task.getId(), e);
+            throw new Exception("Telegram не принял напоминание " + reminder.source() + " " + reminder.refId(), e);
         }
     }
 }
