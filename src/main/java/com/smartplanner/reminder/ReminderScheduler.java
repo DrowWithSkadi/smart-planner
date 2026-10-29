@@ -24,9 +24,10 @@ public class ReminderScheduler {
     private final TaskRepository taskRepository;
     private final List<ReminderSender> senders;
 
-    public ReminderScheduler(TaskRepository taskRepository, ObjectProvider<ReminderSender> senders) {
+    public ReminderScheduler(TaskRepository taskRepository, ObjectProvider<ReminderSender> senderProvider) {
         this.taskRepository = taskRepository;
-        this.senders = senders.orderedStream().toList();
+        // ObjectProvider, а не List: если бот выключен, отправителей нет — и это не ошибка
+        this.senders = senderProvider.orderedStream().toList();
         if (senders.isEmpty()) {
             log.warn("Токен бота не задан — напоминания отправляться не будут. Смотри README, раздел «Запуск».");
         }
