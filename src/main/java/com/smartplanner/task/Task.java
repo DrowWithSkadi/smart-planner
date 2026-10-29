@@ -37,8 +37,15 @@ public class Task {
     @Column(length = 2000)
     private String description;
 
-    /** Когда задача должна быть выполнена. Может быть пустым — тогда это просто заметка. */
+    /** Начало события (или срок задачи). Может быть пустым — тогда это просто заметка. */
     private Instant dueAt;
+
+    /** Конец события. Пустой — у события только время начала. */
+    private Instant endAt;
+
+    /** Имя файла картинки в хранилище (см. ImageStorage). */
+    @Column(length = 100)
+    private String imageName;
 
     /** За сколько минут до dueAt напомнить. */
     private Integer remindBeforeMinutes;
@@ -109,6 +116,22 @@ public class Task {
 
     public void setDueAt(Instant dueAt) {
         this.dueAt = dueAt;
+    }
+
+    public Instant getEndAt() {
+        return endAt;
+    }
+
+    public void setEndAt(Instant endAt) {
+        this.endAt = endAt;
+    }
+
+    public String getImageName() {
+        return imageName;
+    }
+
+    public void setImageName(String imageName) {
+        this.imageName = imageName;
     }
 
     public Integer getRemindBeforeMinutes() {

@@ -7,6 +7,7 @@ import com.smartplanner.webapp.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -18,12 +19,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 
-/** REST API задач текущего пользователя (он определяется по данным Telegram Mini App). */
+/** REST API событий (задач) текущего пользователя (он определяется по данным Telegram Mini App). */
 @RestController
 @RequestMapping("/api/me/tasks")
 public class TaskController {
@@ -73,6 +76,18 @@ public class TaskController {
     public TaskResponse setDone(@CurrentUser AppUser user, @PathVariable Long taskId,
                                 @RequestParam(defaultValue = "true") boolean value) {
         return TaskResponse.from(taskService.setDone(user.getId(), taskId, value), user.zoneId());
+    }
+
+    /** Загрузить картинку: POST /api/me/tasks/5/image (multipart, поле file). */
+    @PostMapping(value = "/{taskId}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public TaskResponse uploadImage(@CurrentUser AppUser user, @PathVariable Long taskId,
+                                    @RequestParam("file") MultipartFile file) throws IOException {
+        return TaskResponse.from(taskService.setImage(user.getId(), taskId, file.getBytes()), user.zoneId());
+    }
+
+    @DeleteMapping("/{taskId}/image")
+    public TaskResponse deleteImage(@CurrentUser AppUser user, @PathVariable Long taskId) {
+        return TaskResponse.from(taskService.removeImage(user.getId(), taskId), user.zoneId());
     }
 
     @DeleteMapping("/{taskId}")

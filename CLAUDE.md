@@ -16,5 +16,8 @@ long polling), позже — Telegram Mini App как фронтенд. Авт�
   События хранятся развёрнутыми (одна строка на повторение), ключ — (subscription, uid, startAt).
   Скачивание — вне транзакции, запись — в TransactionTemplate.
 - REST API — только `/api/me/...`; пользователь берётся через `@CurrentUser AppUser` (подпись Telegram initData).
-- Mini App: `static/app/` — ванильный JS без сборки, цвета из темы Telegram (`--tg-theme-*`), идея дизайна — день на тетрадном листе в клетку.
+- Mini App: `static/app/` — ванильный JS без сборки. Дизайн: тёмный, «стекло» (backdrop-filter), лента дня
+  как в референсе пользователя; акцент `--accent`/`--glow` зависит от месяца (SEASONS в app.js, плавный переход через @property).
+  Шрифты Manrope + JetBrains Mono (время). ≥980px — две колонки. В интерфейсе задачи называются «событиями».
+- Картинки событий: `storage.ImageStorage` (тип по магическим байтам, имя — UUID), раздаются по /images/**.
 - Напоминания идут через `reminder.Reminder` (общий вид для задач и событий) → `ReminderSender`.

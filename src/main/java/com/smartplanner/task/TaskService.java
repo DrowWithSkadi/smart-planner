@@ -1,13 +1,17 @@
 package com.smartplanner.task;
 
 import com.smartplanner.common.NotFoundException;
+import com.smartplanner.storage.ImageStorage;
 import com.smartplanner.task.dto.TaskRequest;
 import com.smartplanner.user.AppUser;
 import com.smartplanner.user.UserService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -21,13 +25,16 @@ public class TaskService {
 
     private final TaskRepository taskRepository;
     private final UserService userService;
+    private final ImageStorage imageStorage;
     private final int defaultRemindBeforeMinutes;
 
     public TaskService(TaskRepository taskRepository,
                        UserService userService,
+                       ImageStorage imageStorage,
                        @Value("${app.reminders.default-before-minutes:15}") int defaultRemindBeforeMinutes) {
         this.taskRepository = taskRepository;
         this.userService = userService;
+        this.imageStorage = imageStorage;
         this.defaultRemindBeforeMinutes = defaultRemindBeforeMinutes;
     }
 
@@ -104,13 +111,65 @@ public class TaskService {
 
     @Transactional
     public void delete(Long userId, Long taskId) {
-        taskRepository.delete(get(userId, taskId));
+        Task task = get(userId, taskId);
+        String image = task.getImageName();
+        taskRepository.delete(task);
+        deleteImageAfterCommit(image);
+    }
+
+    /** Прикрепляет картинку к событию (старая, если была, удаляется). */
+    @Transactional
+    public Task setImage(Long userId, Long taskId, byte[] data) throws IOException {
+        Task task = get(userId, taskId);
+        String old = task.getImageName();
+        String name = imageStorage.save(data);
+        // если транзакция откатится, новый файл не нужен
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != STATUS_COMMITTED) {
+                    imageStorage.delete(name);
+                }
+            }
+        });
+        task.setImageName(name);
+        deleteImageAfterCommit(old);
+        return task;
+    }
+
+    @Transactional
+    public Task removeImage(Long userId, Long taskId) {
+        Task task = get(userId, taskId);
+        deleteImageAfterCommit(task.getImageName());
+        task.setImageName(null);
+        return task;
+    }
+
+    /** Удаляем файл только после успешной записи в базу — иначе можно потерять картинку при ошибке. */
+    private void deleteImageAfterCommit(String name) {
+        if (name == null) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                imageStorage.delete(name);
+            }
+        });
     }
 
     private void apply(Task task, TaskRequest request, ZoneId zone) {
         task.setDescription(request.description());
         LocalDateTime due = request.dueAt();
+        LocalDateTime end = request.endAt();
+        if (end != null && due == null) {
+            throw new IllegalArgumentException("Укажи начало события, если указан конец");
+        }
+        if (end != null && end.isBefore(due)) {
+            throw new IllegalArgumentException("Конец события не может быть раньше начала");
+        }
         task.setDueAt(due == null ? null : due.atZone(zone).toInstant());
+        task.setEndAt(end == null ? null : end.atZone(zone).toInstant());
         task.setRemindBeforeMinutes(request.remindBeforeMinutes() != null
                 ? request.remindBeforeMinutes()
                 : defaultRemindBeforeMinutes);

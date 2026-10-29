@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.Map;
 
@@ -28,6 +29,11 @@ public class ApiExceptionHandler {
                 .map(f -> "Поле «" + f.getField() + "»: " + f.getDefaultMessage())
                 .orElse("Некорректные данные");
         return error(HttpStatus.BAD_REQUEST, message);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, String>> tooLarge(MaxUploadSizeExceededException e) {
+        return error(HttpStatus.BAD_REQUEST, "Картинка больше 5 МБ");
     }
 
     @ExceptionHandler(NotFoundException.class)

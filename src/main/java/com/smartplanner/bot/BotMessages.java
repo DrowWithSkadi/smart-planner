@@ -106,7 +106,9 @@ final class BotMessages {
             lines.add(new Line(e.getStartAt(), e.isAllDay(), sb.toString()));
         }
         for (Task t : tasks) {
-            String time = t.getDueAt() == null ? "" : TIME.format(t.getDueAt().atZone(zone)) + " — ";
+            String time = t.getDueAt() == null ? ""
+                    : TIME.format(t.getDueAt().atZone(zone))
+                    + (t.getEndAt() == null ? "" : "–" + TIME.format(t.getEndAt().atZone(zone))) + " — ";
             lines.add(new Line(t.getDueAt() == null ? Instant.MAX : t.getDueAt(), false,
                     (t.isDone() ? "✅ " : "▫️ ") + time + t.getTitle()));
         }

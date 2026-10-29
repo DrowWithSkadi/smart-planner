@@ -3,84 +3,154 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#09090b">
     <title>Планер</title>
-    <!-- SDK Telegram Mini Apps: даёт данные пользователя, тему и кнопки Telegram -->
+    <!-- SDK Telegram Mini Apps: даёт данные пользователя и кнопки Telegram -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<div id="app">
-    <!-- Экран «План» -->
-    <section id="screen-plan" class="screen" aria-label="План">
-        <header class="top">
-            <button id="month-title" class="month-title" type="button" aria-haspopup="dialog">Октябрь</button>
-            <button id="today-btn" class="text-btn" type="button">Сегодня</button>
+<div class="glow" aria-hidden="true"></div>
+
+<div id="app" class="layout">
+
+    <!-- Левая колонка (на ПК): заголовок дня, месяц, календари. На телефоне — только заголовок. -->
+    <aside class="side">
+        <header class="hero">
+            <h1 class="hero-day"><span id="hero-weekday">Чт</span><span class="hero-dot">.</span></h1>
+            <button id="hero-date" class="hero-date" type="button" aria-label="Выбрать день в календаре">
+                <span id="hero-month" class="hero-month">октябрь</span>
+                <span id="hero-num" class="hero-num">29</span>
+            </button>
         </header>
 
-        <nav id="week" class="week" aria-label="Дни недели"></nav>
-
-        <div id="day-head" class="day-head"></div>
-        <div id="allday" class="allday"></div>
-
-        <div id="sheet-paper" class="paper" aria-label="Расписание дня">
-            <div id="timeline" class="timeline"></div>
-        </div>
-
-        <section id="inbox" class="inbox" hidden>
-            <h2 class="section-title">Без даты</h2>
-            <ul id="inbox-list" class="task-list"></ul>
+        <section class="side-month" aria-label="Месяц">
+            <div class="month-nav">
+                <button class="icon-btn" type="button" data-month-step="-1" aria-label="Предыдущий месяц">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+                </button>
+                <h2 class="month-title" data-month-title>октябрь 2026</h2>
+                <button class="icon-btn" type="button" data-month-step="1" aria-label="Следующий месяц">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+                </button>
+            </div>
+            <div class="month-grid" data-month-grid></div>
         </section>
-    </section>
 
-    <!-- Экран «Календари» -->
-    <section id="screen-calendars" class="screen" aria-label="Календари" hidden>
-        <header class="top">
-            <h1 class="month-title static">Календари</h1>
-        </header>
-        <ul id="calendar-list" class="calendar-list"></ul>
+        <section class="side-calendars" aria-label="Мои календари">
+            <h2 class="side-title">Календари</h2>
+            <ul id="side-calendar-list" class="side-calendar-list"></ul>
+            <button class="ghost-btn" type="button" data-open-screen="calendars">Управлять календарями</button>
+        </section>
+    </aside>
 
-        <form id="subscribe-form" class="subscribe">
-            <label for="subscribe-url" class="field-label">Ссылка на календарь</label>
-            <input id="subscribe-url" class="input" type="url" inputmode="url" autocomplete="off"
-                   placeholder="webcal://… или https://….ics" required>
-            <button class="primary-btn" type="submit">Подписаться</button>
-            <p class="hint">
-                Google: настройки календаря → «Секретный адрес в формате iCal».
-                iCloud: ⓘ у календаря → «Публичный календарь».
-                Расписание учёбы: ищи кнопку «Экспорт в iCal» или «Подписка».
-            </p>
-        </form>
-    </section>
+    <!-- Правая колонка: экраны -->
+    <main class="main">
 
-    <button id="add-btn" class="fab" type="button" aria-label="Новая задача">+</button>
+        <!-- Экран «День» -->
+        <section id="screen-day" class="screen" aria-label="День">
+            <div class="week-wrap">
+                <nav id="week" class="week" aria-label="Дни недели">
+                    <span id="week-indicator" class="week-indicator" aria-hidden="true"></span>
+                </nav>
+            </div>
+            <div id="allday" class="allday"></div>
+            <div id="agenda" class="agenda" aria-live="polite"></div>
+        </section>
 
-    <nav class="tabs" aria-label="Разделы">
-        <button class="tab" data-screen="plan" aria-current="page" type="button">План</button>
-        <button class="tab" data-screen="calendars" type="button">Календари</button>
-    </nav>
+        <!-- Экран «Месяц» (на телефоне) -->
+        <section id="screen-month" class="screen" aria-label="Месяц" hidden>
+            <div class="month-nav big">
+                <button class="icon-btn" type="button" data-month-step="-1" aria-label="Предыдущий месяц">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+                </button>
+                <h2 class="month-title" data-month-title>октябрь 2026</h2>
+                <button class="icon-btn" type="button" data-month-step="1" aria-label="Следующий месяц">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+                </button>
+            </div>
+            <div class="month-grid big" data-month-grid></div>
+            <p class="hint center">Нажми на день, чтобы открыть его план</p>
+        </section>
+
+        <!-- Экран «Календари» -->
+        <section id="screen-calendars" class="screen" aria-label="Календари" hidden>
+            <h2 class="screen-title">Календари</h2>
+            <p class="hint">Подпишись на расписание — пары появятся в плане, а за 15 минут до начала придёт напоминание в Telegram.</p>
+            <ul id="calendar-list" class="calendar-list"></ul>
+
+            <form id="subscribe-form" class="glass subscribe">
+                <label for="subscribe-url" class="field-label">Ссылка на календарь</label>
+                <input id="subscribe-url" class="input" type="url" inputmode="url" autocomplete="off"
+                       placeholder="webcal://… или https://….ics" required>
+                <button class="accent-btn" type="submit">Подписаться</button>
+                <p class="hint">
+                    Google: настройки календаря → «Секретный адрес в формате iCal».
+                    iCloud: ⓘ у календаря → «Публичный календарь».
+                    Расписание учёбы: ищи «Экспорт в iCal» или «Подписка».
+                </p>
+            </form>
+        </section>
+    </main>
+
+    <!-- Плавающая панель: вкладки + круглая кнопка «+» -->
+    <div class="dock">
+        <nav class="glass tabs" aria-label="Разделы">
+            <span id="tab-indicator" class="tab-indicator" aria-hidden="true"></span>
+            <button class="tab" data-screen="day" aria-current="page" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>
+                <span>День</span>
+            </button>
+            <button class="tab tab-month" data-screen="month" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 9.5h16M9.5 9.5V20M14.5 9.5V20M4 15h16"/></svg>
+                <span>Месяц</span>
+            </button>
+            <button class="tab" data-screen="calendars" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9"/><circle cx="18.5" cy="17" r="1.5"/></svg>
+                <span>Календари</span>
+            </button>
+        </nav>
+        <button id="add-btn" class="fab" type="button" aria-label="Новое событие">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+    </div>
 </div>
 
-<!-- Окно задачи -->
+<!-- Окно события: создание и редактирование -->
 <div id="task-sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="task-sheet-title" hidden>
     <div class="sheet-backdrop" data-close></div>
-    <form id="task-form" class="sheet-body">
-        <div class="sheet-grip" aria-hidden="true"></div>
-        <h2 id="task-sheet-title" class="sheet-title">Новая задача</h2>
+    <form id="task-form" class="sheet-body glass-strong">
+        <div class="sheet-grip" data-drag aria-hidden="true"></div>
+        <div class="sheet-head" data-drag>
+            <h2 id="task-sheet-title" class="sheet-title">Новое событие</h2>
+            <button class="icon-btn" type="button" data-close aria-label="Закрыть">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+        </div>
 
-        <input id="task-title" class="input big" type="text" maxlength="200" placeholder="Что нужно сделать?" required>
+        <input id="task-title" class="input big" type="text" maxlength="200" placeholder="Что планируешь?" required>
+
+        <label for="task-date" class="field-label">День</label>
+        <input id="task-date" class="input" type="date">
 
         <div class="row">
             <div class="col">
-                <label for="task-date" class="field-label">Дата</label>
-                <input id="task-date" class="input" type="date">
+                <label for="task-start" class="field-label">Начало</label>
+                <input id="task-start" class="input mono" type="time">
             </div>
             <div class="col">
-                <label for="task-time" class="field-label">Время</label>
-                <input id="task-time" class="input" type="time">
+                <label for="task-end" class="field-label">Конец</label>
+                <input id="task-end" class="input mono" type="time">
             </div>
+        </div>
+        <div class="chips" role="group" aria-label="Длительность">
+            <button class="chip-btn" type="button" data-duration="30">30 мин</button>
+            <button class="chip-btn" type="button" data-duration="60">1 час</button>
+            <button class="chip-btn" type="button" data-duration="90">1,5 часа</button>
+            <button class="chip-btn" type="button" data-duration="120">2 часа</button>
         </div>
 
         <label for="task-remind" class="field-label">Напомнить</label>
@@ -94,44 +164,45 @@
         </select>
 
         <label for="task-desc" class="field-label">Заметка</label>
-        <textarea id="task-desc" class="input" rows="3" maxlength="2000"></textarea>
+        <textarea id="task-desc" class="input" rows="3" maxlength="2000" placeholder="Детали, ссылки, что взять с собой"></textarea>
+
+        <span class="field-label">Картинка</span>
+        <div id="image-field" class="image-field">
+            <label id="image-pick" class="image-pick" for="task-image">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-7 8"/></svg>
+                <span>Добавить картинку</span>
+            </label>
+            <input id="task-image" class="visually-hidden" type="file" accept="image/*">
+            <figure id="image-preview" class="image-preview" hidden>
+                <img id="image-preview-img" alt="Картинка события">
+                <button id="image-remove" class="icon-btn on-image" type="button" aria-label="Убрать картинку">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                </button>
+            </figure>
+        </div>
 
         <div class="sheet-actions">
             <button id="task-delete" class="danger-btn" type="button" hidden>Удалить</button>
-            <button class="primary-btn" type="submit">Сохранить</button>
+            <button id="task-save" class="accent-btn" type="submit">Сохранить</button>
         </div>
     </form>
 </div>
 
-<!-- Окно события календаря (только просмотр) -->
+<!-- Окно события из календаря (только просмотр) -->
 <div id="event-sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="event-title" hidden>
     <div class="sheet-backdrop" data-close></div>
-    <div class="sheet-body">
-        <div class="sheet-grip" aria-hidden="true"></div>
+    <div class="sheet-body glass-strong">
+        <div class="sheet-grip" data-drag aria-hidden="true"></div>
         <p id="event-calendar" class="event-calendar"></p>
         <h2 id="event-title" class="sheet-title"></h2>
-        <p id="event-time" class="event-line"></p>
-        <p id="event-location" class="event-line"></p>
+        <p id="event-time" class="event-time"></p>
+        <p id="event-location" class="pill"></p>
         <p id="event-desc" class="event-desc"></p>
         <p class="hint">Событие из подписанного календаря — изменить его можно только в источнике.</p>
     </div>
 </div>
 
-<!-- Окно выбора месяца -->
-<div id="month-sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="month-sheet-title" hidden>
-    <div class="sheet-backdrop" data-close></div>
-    <div class="sheet-body">
-        <div class="sheet-grip" aria-hidden="true"></div>
-        <div class="month-nav">
-            <button id="month-prev" class="icon-btn" type="button" aria-label="Предыдущий месяц">‹</button>
-            <h2 id="month-sheet-title" class="sheet-title">Октябрь 2026</h2>
-            <button id="month-next" class="icon-btn" type="button" aria-label="Следующий месяц">›</button>
-        </div>
-        <div id="month-grid" class="month-grid"></div>
-    </div>
-</div>
-
-<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<div id="toast" class="toast glass-strong" role="status" aria-live="polite" hidden></div>
 <div id="fatal" class="fatal" hidden></div>
 
 <script src="app.js"></script>

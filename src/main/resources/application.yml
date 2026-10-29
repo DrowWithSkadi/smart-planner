@@ -20,6 +20,12 @@ spring:
       ddl-auto: update
     open-in-view: false
 
+  servlet:
+    multipart:
+      # картинки событий — до 5 МБ (с запасом на служебные данные запроса)
+      max-file-size: 6MB
+      max-request-size: 7MB
+
   h2:
     console:
       # Просмотр базы в браузере: http://localhost:8080/h2-console
@@ -56,6 +62,9 @@ app:
     days-ahead: 60
     max-size-mb: 5
     max-per-user: 10
+  storage:
+    # Папка для картинок событий (она в .gitignore вместе с data/)
+    images-dir: ./data/images
   webapp:
     # Сколько часов действительны данные входа из Telegram
     init-data-max-age-hours: 24

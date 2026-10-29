@@ -12,6 +12,7 @@ import java.time.Instant;
  *
  * @param source откуда напоминание: от задачи (можно отметить «готово» и отложить) или из календаря
  * @param refId  ID задачи или события
+ * @param imageName картинка события (если есть, напоминание придёт с фото)
  */
 public record Reminder(
         Source source,
@@ -21,18 +22,19 @@ public record Reminder(
         Instant startAt,
         String location,
         String description,
-        String calendarName
+        String calendarName,
+        String imageName
 ) {
     public enum Source { TASK, CALENDAR_EVENT }
 
     public static Reminder of(Task task) {
         return new Reminder(Source.TASK, task.getId(), task.getUser(), task.getTitle(), task.getDueAt(),
-                null, task.getDescription(), null);
+                null, task.getDescription(), null, task.getImageName());
     }
 
     public static Reminder of(CalendarEvent event) {
         return new Reminder(Source.CALENDAR_EVENT, event.getId(), event.getSubscription().getUser(),
                 event.getTitle(), event.getStartAt(), event.getLocation(), event.getDescription(),
-                event.getSubscription().getName());
+                event.getSubscription().getName(), null);
     }
 }

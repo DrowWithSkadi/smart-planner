@@ -22,6 +22,7 @@ import org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.methods.menubutton.SetChatMenuButton;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageCaption;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -170,7 +171,7 @@ public class PlannerBot extends DefaultLongPollingUpdateConsumer implements Spri
         try {
             QuickAddParser.ParsedTask parsed = QuickAddParser.parse(text, LocalDate.now(zone));
             Task task = taskService.create(user.getId(),
-                    new TaskRequest(parsed.title(), null, parsed.dueAt(), null));
+                    new TaskRequest(parsed.title(), null, parsed.dueAt(), null, null));
             send(user.getChatId(), BotMessages.taskCreated(task, zone), BotMessages.createdButtons(task.getId()));
         } catch (IllegalArgumentException e) {
             send(user.getChatId(), "🤔 " + e.getMessage() + "\n\n" + BotMessages.help(), null);
@@ -259,14 +260,24 @@ public class PlannerBot extends DefaultLongPollingUpdateConsumer implements Spri
 
     /** Дописывает статус к сообщению с кнопками и убирает кнопки. */
     private void appendStatus(MaybeInaccessibleMessage original, String status) {
-        if (!(original instanceof Message message) || message.getText() == null) {
+        if (!(original instanceof Message message)) {
             return;
         }
-        execute(EditMessageText.builder()
-                .chatId(message.getChatId())
-                .messageId(message.getMessageId())
-                .text(message.getText() + "\n\n" + status)
-                .build());
+        if (message.getText() != null) {
+            execute(EditMessageText.builder()
+                    .chatId(message.getChatId())
+                    .messageId(message.getMessageId())
+                    .text(message.getText() + "\n\n" + status)
+                    .build());
+        } else if (message.getCaption() != null) {
+            // напоминание с картинкой: у него не текст, а подпись к фото
+            String caption = message.getCaption() + "\n\n" + status;
+            execute(EditMessageCaption.builder()
+                    .chatId(message.getChatId())
+                    .messageId(message.getMessageId())
+                    .caption(caption.length() > 1024 ? caption.substring(0, 1024) : caption)
+                    .build());
+        }
     }
 
     // ---------- Вспомогательное ----------
